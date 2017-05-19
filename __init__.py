@@ -221,10 +221,7 @@ def jump(il, dest):
 		il.append(il.goto(label))
 
 class Instruction(object):
-	width = None
 	src_value = None
-	dst_value = None
-	error = False
 	flag_offset = 0
 	length = 1
 	def __init__(self, data, addr):
@@ -236,11 +233,10 @@ class Instruction(object):
 	def parseWithFlagSet(self, data, addr):
 		if self.length == 1:
 			return
-		self.length = self.flag_offset+1+operand_lengths[self.flag]
 		try:
-			self.width = flag_word_size[self.flag]
+			self.length = self.flag_offset+1+operand_lengths[self.flag]
 		except KeyError:
-			raise VMNDHError("Unknown flag %x in instr %s" % (self.flag, self.getName()))
+			raise VMNDHError("Flag %x not in operand_lengths" % self.flag)
 		self.dst_value = ord(data[self.flag_offset+1])
 		if self.flag in [OP_FLAG_DIRECT16, OP_FLAG_DIRECT08]:
 			if self.flag == OP_FLAG_DIRECT16:
@@ -263,25 +259,21 @@ class Instruction(object):
 				raise VMNDHError("Source %x not a valid register" % self.src_value)
 
 	def getTextToken(self):
-		if not hasattr(self, "flag") or self.flag < 0 or self.flag > len(OperandTokens):
+		if not hasattr(self, "flag"):
 			return []
 		return OperandTokens[self.flag](self.dst_value, self.src_value)
 	def do_il(self, data, addr, il):
 		return il.unimplemented()
 
 class FlagInstruction(Instruction):
+	flag_offset = 1
 	def __init__(self, data, addr):
 		self.length = 4
 		self.flag = ord(data[1])
-		try:
-			self.length = 2 + operand_lengths[self.flag]
-		except KeyError:
-			raise VMNDHError("Flag %x not in operand_lengths" % self.flag)
 
 		if self.flag not in self.valid_flags:
 			raise VMNDHError("Flag %x not valid for instr %s" % (self.flag, self.getName()))
 
-		self.flag_offset = 1
 		Instruction.__init__(self, data, addr)
 
 class SingleOpInstruction(Instruction):
@@ -732,7 +724,7 @@ class VMNDH(Architecture):
 	def perform_get_instruction_info(self, data, addr):
 		instr_obj = self.decode_instruction(data, addr)
 
-		if not instr_obj or instr_obj.error:
+		if not instr_obj:
 			return None
 
 		result = InstructionInfo()
@@ -759,14 +751,14 @@ class VMNDH(Architecture):
 	def perform_get_instruction_text(self, data, addr):
 		instr_obj = self.decode_instruction(data, addr)
 
-		if not instr_obj or instr_obj.error:
+		if not instr_obj:
 			return None
 
 		tokens = []
 
 		instruction_text = instr_obj.getName()
 
-		if instr_obj.width == 1:
+		if hasattr(instr_obj, "flag") and flag_word_size[instr_obj.flag] == 1:
 			instruction_text += '.b'
 
 		tokens = [
@@ -780,7 +772,7 @@ class VMNDH(Architecture):
 	def perform_get_instruction_low_level_il(self, data, addr, il):
 		instr_obj = self.decode_instruction(data, addr)
 
-		if not instr_obj or instr_obj.error:
+		if not instr_obj:
 			return None
 
 		insns = instr_obj.do_il(data, addr, il)
@@ -836,14 +828,5 @@ class VMNDHView(BinaryView):
 	def perform_get_entry_point(self):
 		return 0x8000
 
-class DefaultCallingConvention(CallingConvention):
-	name = 'default'
-	int_arg_regs = ('r0', 'r1')
-	int_return_reg = 'r0'
-
 VMNDHView.register()
 VMNDH.register()
-
-arch = Architecture[ARCH_NAME]
-arch.register_calling_convention(DefaultCallingConvention(arch))
-#BinaryViewType['VMNDH'].register_arch(23, Endianness.LittleEndian, arch)
