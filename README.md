@@ -1,4 +1,4 @@
-# VMNDH Architecture Plugin (v0.1)
+# VMNDH Architecture Plugin (v0.2)
 Author: **verylazyguy**
 
 _A disassembler and lifter for the VMNDH architecture._
